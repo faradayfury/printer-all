@@ -6,10 +6,37 @@
 # and ICM color profiles. No Ghostscript required — uses macOS's
 # built-in cgpdftoraster.
 #
-# Usage: sudo ./install.sh
+# Usage: sudo ./install.sh [--firmware-autoload]
 #
 
 set -e
+
+usage() {
+    echo "Usage: sudo $0 [--firmware-autoload]"
+    echo ""
+    echo "Options:"
+    echo "  --firmware-autoload  Also install the tested HP LaserJet 1018"
+    echo "                       firmware LaunchDaemon."
+    echo "  --help               Show this help."
+}
+
+FIRMWARE_AUTOLOAD=0
+for arg in "$@"; do
+    case "$arg" in
+        --firmware-autoload)
+            FIRMWARE_AUTOLOAD=1
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "ERROR: Unknown option: $arg" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FILTER_DIR="/usr/libexec/cups/filter"
@@ -36,6 +63,10 @@ if [ "$ARCH" != "arm64" ]; then
     echo "WARNING: These filters are built for Apple Silicon (arm64)."
     echo "  Detected architecture: $ARCH"
     echo ""
+fi
+if [ "$FIRMWARE_AUTOLOAD" -eq 1 ] && [ "$ARCH" != "arm64" ]; then
+    echo "ERROR: The firmware autoloader currently supports Apple Silicon only."
+    exit 1
 fi
 
 # Step 1: Compile filters
@@ -102,6 +133,12 @@ echo "  ICM profiles → $ICM_DIR/"
 launchctl stop org.cups.cupsd 2>/dev/null || true
 launchctl start org.cups.cupsd 2>/dev/null || true
 
+if [ "$FIRMWARE_AUTOLOAD" -eq 1 ]; then
+    echo ""
+    echo "Installing the optional HP LaserJet 1018 firmware autoloader..."
+    "$SCRIPT_DIR/install-firmware-loader.sh"
+fi
+
 echo ""
 echo "=== Installation complete! ==="
 echo ""
@@ -114,4 +151,9 @@ echo "  3. Select the matching PPD as the driver"
 echo ""
 echo "For printers requiring firmware (HP LaserJet 1000/1005/1018/1020/P1005/P1006/P1505):"
 echo "  lp -oraw $FIRMWARE_DIR/<firmware>.dl"
+if [ "$FIRMWARE_AUTOLOAD" -eq 0 ]; then
+    echo ""
+    echo "HP LaserJet 1018 automatic firmware loading is available with:"
+    echo "  sudo $SCRIPT_DIR/install-firmware-loader.sh"
+fi
 echo ""

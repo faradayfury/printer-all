@@ -8,8 +8,9 @@ FILTERS  = rastertoxqx rastertozjs rastertohiperc rastertoqpdl \
            rastertolava rastertohbpl2 rastertohp rastertooak rastertoslx
 
 TOOLS    = arm2hpdl xqxdecode
+FIRMWARE_TOOLS = foo2zjs-firmware-loader
 
-all: $(FILTERS)
+all: $(FILTERS) $(FIRMWARE_TOOLS)
 
 tools: $(TOOLS)
 
@@ -46,7 +47,10 @@ arm2hpdl: foo2zjs/arm2hpdl.c
 xqxdecode: foo2zjs/xqxdecode.c $(JBIG_SRC)
 	$(CC) $(CFLAGS) -o $@ $^
 
+foo2zjs-firmware-loader: foo2zjs-firmware-loader.c
+	$(CC) -Wall -Wextra -O2 -o $@ $< -framework IOKit -framework CoreFoundation
+
 clean:
-	rm -f $(FILTERS) $(TOOLS)
+	rm -f $(FILTERS) $(TOOLS) $(FIRMWARE_TOOLS)
 
 .PHONY: all tools clean

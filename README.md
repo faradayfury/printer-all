@@ -167,6 +167,15 @@ sudo ./install.sh
 
 This compiles all 9 filters, installs them to `/usr/libexec/cups/filter/`, copies PPDs and firmware, then restarts CUPS.
 
+To install the tested HP LaserJet 1018 firmware autoloader at the same time,
+explicitly opt in:
+
+```bash
+sudo ./install.sh --firmware-autoload
+```
+
+The default install remains unchanged and does not install a system daemon.
+
 ### Manual Build
 
 ```bash
@@ -209,6 +218,88 @@ Upload firmware after the printer powers on:
 lp -oraw /usr/local/share/foo2zjs/firmware/sihpP1005.dl
 ```
 
+### Automatic Firmware Loading (HP LaserJet 1018)
+
+The HP LaserJet 1018 firmware loader is a separate, optional component. It
+does not install or replace CUPS filters, PPDs, queues, or printer drivers.
+
+Currently supported:
+
+- HP LaserJet 1018 (`03f0:4117`)
+
+The standalone modes and LaunchDaemon have been tested on real HP LaserJet
+1018 hardware. Testing covers startup detection, power-cycle removal and
+arrival events, conditional upload, post-upload verification, skipping an
+already-loaded device, and normal printing afterward. The remaining failure
+and sleep/wake cases in the test plan below should be completed before support
+is expanded to other models.
+
+The native helper uses IOKit USB arrival notifications and checks the
+printer's IEEE-1284 Device ID for `FWVER` before uploading firmware. It does
+not poll USB devices and does not upload firmware when it is already loaded.
+
+Build and inspect the current state before installing the daemon:
+
+```bash
+make foo2zjs-firmware-loader
+./foo2zjs-firmware-loader --status
+sudo ./foo2zjs-firmware-loader --once
+./foo2zjs-firmware-loader --status
+```
+
+Install the system LaunchDaemon:
+
+```bash
+sudo ./install-firmware-loader.sh
+```
+
+It can also be selected as part of the main installation:
+
+```bash
+sudo ./install.sh --firmware-autoload
+```
+
+The optional installer only installs the firmware helper, its LaunchDaemon,
+and `sihp1018.dl` when that firmware file is missing. In particular, it does
+not run `install.sh` and does not touch `rastertozjs` or any installed PPD.
+
+Installed paths:
+
+```text
+/usr/local/libexec/foo2zjs/foo2zjs-firmware-loader
+/Library/LaunchDaemons/org.foo2zjs.firmware-loader.plist
+/usr/local/share/foo2zjs/firmware/sihp1018.dl
+```
+
+Inspect the service and log:
+
+```bash
+sudo launchctl print system/org.foo2zjs.firmware-loader
+sudo tail -f /var/log/foo2zjs-firmware-loader.log
+```
+
+Uninstall the helper and LaunchDaemon:
+
+```bash
+sudo ./uninstall-firmware-loader.sh
+```
+
+Uninstallation leaves firmware files, CUPS queues, filters, and PPDs
+unchanged.
+
+#### Firmware Loader Test Plan
+
+1. With the Mac running, power the printer off and on; verify one upload.
+2. Start the daemon while the printer is already on; verify startup detection.
+3. Restart the daemon after firmware is loaded; verify that upload is skipped.
+4. Power-cycle the printer; verify that firmware is uploaded again.
+5. Disconnect and reconnect USB; verify arrival/removal logging.
+6. Temporarily move the firmware file; verify a clear error without a crash.
+7. Restore firmware and print `testpage.pdf` normally.
+8. Print a document and verify that firmware is not resent during the job.
+9. Sleep and wake the Mac, then verify printing and firmware state.
+10. Verify the helper remains native arm64 with system-only dependencies.
+
 ## Files
 
 | Path | Purpose |
@@ -217,9 +308,13 @@ lp -oraw /usr/local/share/foo2zjs/firmware/sihpP1005.dl
 | `foo2zjs/jbig.c` | JBIG compression library |
 | `foo2zjs/*.h` | Format definitions (xqx.h, zjs.h, hiperc.h, qpdl.h, hbpl.h, oak.h, slx.h) |
 | `foo2zjs/*.img` | Firmware images for HP LaserJets |
+| `foo2zjs-firmware-loader.c` | Native macOS HP firmware loader |
+| `macos/*.plist` | Optional macOS LaunchDaemon definitions |
 | `foo2zjs/*.icm` | ICC color profiles for color printers |
 | `PPD/` | Printer description files (89 files) |
 | `install.sh` | Automated installer |
+| `install-firmware-loader.sh` | Installs only the optional firmware loader |
+| `uninstall-firmware-loader.sh` | Removes only the optional firmware loader |
 | `Makefile` | Build system |
 
 ## Contributing

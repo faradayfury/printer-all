@@ -18,6 +18,10 @@ Most of these drivers are untested on real hardware. The single most useful cont
    ```bash
    lp -oraw /usr/local/share/foo2zjs/firmware/<your-firmware>.dl
    ```
+   HP LaserJet 1018 testers can instead install the tested automatic loader:
+   ```bash
+   sudo ./install-firmware-loader.sh
+   ```
 
 5. Print the included test page:
    ```bash
