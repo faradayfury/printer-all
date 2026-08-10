@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <time.h>
+#include <stdarg.h>
 #include <cups/cups.h>
 #include <cups/raster.h>
 #include "jbig.h"
@@ -37,6 +38,64 @@
 
 /* ---------- ZJS output helpers ---------- */
 
+static FILE *DebugOutput = NULL;
+
+static size_t
+output_write(const void *ptr, size_t size, size_t nmemb, FILE *fp)
+{
+    size_t written = fwrite(ptr, size, nmemb, fp);
+
+    if (written != nmemb)
+        return written;
+    if (DebugOutput && fp == stdout &&
+        fwrite(ptr, size, nmemb, DebugOutput) != nmemb)
+    {
+        fprintf(stderr, "ERROR: rastertozjs: debug output write failed\n");
+        exit(1);
+    }
+    return written;
+}
+
+static int
+output_putc(int ch, FILE *fp)
+{
+    int rc = fputc(ch, fp);
+
+    if (rc == EOF)
+        return rc;
+    if (DebugOutput && fp == stdout && fputc(ch, DebugOutput) == EOF)
+    {
+        fprintf(stderr, "ERROR: rastertozjs: debug output write failed\n");
+        exit(1);
+    }
+    return rc;
+}
+
+static int
+output_printf(FILE *fp, const char *format, ...)
+{
+    int rc;
+    va_list ap, copy;
+
+    va_start(ap, format);
+    va_copy(copy, ap);
+    rc = vfprintf(fp, format, ap);
+    va_end(ap);
+    if (rc < 0)
+    {
+        va_end(copy);
+        return rc;
+    }
+    if (DebugOutput && fp == stdout && vfprintf(DebugOutput, format, copy) < 0)
+    {
+        va_end(copy);
+        fprintf(stderr, "ERROR: rastertozjs: debug output write failed\n");
+        exit(1);
+    }
+    va_end(copy);
+    return rc;
+}
+
 static void
 chunk_write_rsvd(unsigned long type, unsigned int rsvd,
                  unsigned long items, unsigned long size, FILE *fp)
@@ -47,7 +106,7 @@ chunk_write_rsvd(unsigned long type, unsigned int rsvd,
     chunk.size = be32(sizeof(ZJ_HEADER) + size);
     chunk.reserved = be16(rsvd);
     chunk.signature = 0x5a5a;
-    if (fwrite(&chunk, 1, sizeof(ZJ_HEADER), fp) == 0)
+    if (output_write(&chunk, 1, sizeof(ZJ_HEADER), fp) != sizeof(ZJ_HEADER))
     {
         fprintf(stderr, "ERROR: rastertozjs: chunk_write failed\n");
         exit(1);
@@ -70,7 +129,7 @@ item_uint32_write(unsigned short item, unsigned long value, FILE *fp)
     rec.header.type = ZJIT_UINT32;
     rec.header.param = 0;
     rec.value = be32(value);
-    if (fwrite(&rec, 1, sizeof(ZJ_ITEM_UINT32), fp) == 0)
+    if (output_write(&rec, 1, sizeof(ZJ_ITEM_UINT32), fp) != sizeof(ZJ_ITEM_UINT32))
     {
         fprintf(stderr, "ERROR: rastertozjs: item_uint32_write failed\n");
         exit(1);
@@ -201,7 +260,7 @@ write_plane(int planeNum, BIE_CHAIN **root, FILE *fp, int model)
         if (current == *root)
         {
             chunk_write(ZJT_JBIG_BIH, 0, current->len, fp);
-            fwrite(current->data, 1, current->len, fp);
+            output_write(current->data, 1, current->len, fp);
         }
         else
         {
@@ -212,9 +271,9 @@ write_plane(int planeNum, BIE_CHAIN **root, FILE *fp, int model)
             else
                 pad_len = 0;
             chunk_write(ZJT_JBIG_BID, 0, len + pad_len, fp);
-            fwrite(current->data, 1, len, fp);
+            output_write(current->data, 1, len, fp);
             for (i = 0; i < pad_len; i++)
-                putc(0, fp);
+                output_putc(0, fp);
         }
     }
 
@@ -270,22 +329,22 @@ start_doc(FILE *fp, int model, int density, int economode)
         tmp = localtime(&now);
         strftime(datetime, sizeof(datetime), "%Y%m%d%H%M%S", tmp);
 
-        fprintf(fp, "\033%%-12345X@PJL JOB\n");
-        fprintf(fp, "@PJL SET JAMRECOVERY=OFF\n");
-        fprintf(fp, "@PJL SET DENSITY=%d\n", density);
-        fprintf(fp, "@PJL SET ECONOMODE=%s\n", economode ? "ON" : "OFF");
-        fprintf(fp, "@PJL SET RET=MEDIUM\n");
-        fprintf(fp, "@PJL INFO STATUS\n");
-        fprintf(fp, "@PJL USTATUS DEVICE = ON\n");
-        fprintf(fp, "@PJL USTATUS JOB = ON\n");
-        fprintf(fp, "@PJL USTATUS PAGE = ON\n");
-        fprintf(fp, "@PJL USTATUS TIMED = 30\n");
-        fprintf(fp, "@PJL SET JOBATTR=\"JobAttr4=%s\"", datetime);
-        fputc(0, fp);
-        fprintf(fp, "\033%%-12345X");
+        output_printf(fp, "\033%%-12345X@PJL JOB\n");
+        output_printf(fp, "@PJL SET JAMRECOVERY=OFF\n");
+        output_printf(fp, "@PJL SET DENSITY=%d\n", density);
+        output_printf(fp, "@PJL SET ECONOMODE=%s\n", economode ? "ON" : "OFF");
+        output_printf(fp, "@PJL SET RET=MEDIUM\n");
+        output_printf(fp, "@PJL INFO STATUS\n");
+        output_printf(fp, "@PJL USTATUS DEVICE = ON\n");
+        output_printf(fp, "@PJL USTATUS JOB = ON\n");
+        output_printf(fp, "@PJL USTATUS PAGE = ON\n");
+        output_printf(fp, "@PJL USTATUS TIMED = 30\n");
+        output_printf(fp, "@PJL SET JOBATTR=\"JobAttr4=%s\"", datetime);
+        output_putc(0, fp);
+        output_printf(fp, "\033%%-12345X");
     }
 
-    fwrite(header, 1, sizeof(header), fp);
+    output_write(header, 1, sizeof(header), fp);
 
     /* START_DOC */
     nitems = 1; /* ZJI_DMCOLLATE always */
@@ -345,8 +404,8 @@ end_doc(FILE *fp, int model)
     if (model == MODEL_HP1020 || model == MODEL_HP_PRO ||
         model == MODEL_HP_PRO_CP)
     {
-        fprintf(fp, "\033%%-12345X@PJL EOJ\n");
-        fprintf(fp, "\033%%-12345X");
+        output_printf(fp, "\033%%-12345X@PJL EOJ\n");
+        output_printf(fp, "\033%%-12345X");
     }
 }
 
@@ -580,6 +639,7 @@ main(int argc, char *argv[])
     int                 density = 3;
     int                 economode = 0;
     int                 model = MODEL_HP1020;
+    const char          *debugPath;
 
     if (argc < 6 || argc > 7)
     {
@@ -592,6 +652,19 @@ main(int argc, char *argv[])
     signal(SIGPIPE, SIG_IGN);
 
     parse_options(argv[5], &density, &economode, &model);
+
+    debugPath = getenv("RASTERTOZJS_DEBUG_FILE");
+    if (debugPath && debugPath[0])
+    {
+        DebugOutput = fopen(debugPath, "wb");
+        if (!DebugOutput)
+        {
+            fprintf(stderr, "ERROR: rastertozjs: cannot open debug output %s\n",
+                    debugPath);
+            return 1;
+        }
+        fprintf(stderr, "DEBUG: LJ1018: debug_file=%s\n", debugPath);
+    }
 
     if (argc == 7)
     {
@@ -665,6 +738,36 @@ main(int argc, char *argv[])
         bpl   = (jbigW + 7) / 8;
         bpl16 = (bpl + 15) & ~15;
 
+        fprintf(stderr,
+                "DEBUG: LJ1018: page=%d cups=%ux%u cupsBytesPerLine=%u "
+                "cupsBitsPerPixel=%u cupsBitsPerColor=%u cupsColorSpace=%u "
+                "HWResolution=%dx%d PageSizeName=%s "
+                "PageSize=%ux%u cupsPageSize=%.2fx%.2f\n",
+                page, cupsW, cupsH, cupsBpl,
+                header.cupsBitsPerPixel, header.cupsBitsPerColor,
+                header.cupsColorSpace, resX, resY,
+                header.cupsPageSizeName[0] ? header.cupsPageSizeName : "(none)",
+                header.PageSize[0], header.PageSize[1],
+                header.cupsPageSize[0], header.cupsPageSize[1]);
+        fprintf(stderr,
+                "DEBUG: LJ1018: page=%d ImagingBoundingBox=%u,%u,%u,%u "
+                "cupsImagingBBox=%.2f,%.2f,%.2f,%.2f\n",
+                page, header.ImagingBoundingBox[0], header.ImagingBoundingBox[1],
+                header.ImagingBoundingBox[2], header.ImagingBoundingBox[3],
+                header.cupsImagingBBox[0], header.cupsImagingBBox[1],
+                header.cupsImagingBBox[2], header.cupsImagingBBox[3]);
+        fprintf(stderr,
+                "DEBUG: LJ1018: page=%d computed realWidth=%d jbigW=%d "
+                "jbigH=%u bpp=%d inputBpl=%u jbigBpl=%d stride=%d model=%d\n",
+                page, realWidth, jbigW, cupsH, bpp, cupsBpl, bpl, bpl16, model);
+        fprintf(stderr,
+                "DEBUG: LJ1018: page=%d ZJS VIDEO_X=%d VIDEO_Y=%u VIDEO_BPP=%d "
+                "RASTER_X=%d RASTER_Y=%u RESOLUTION_X=600 RESOLUTION_Y=%d "
+                "OFFSET_X=(absent) OFFSET_Y=(absent) NBIE=1 PLANE=4 "
+                "PAPER=%d MEDIA=%d SOURCE=%d COPIES=%d\n",
+                page, realWidth / bpp, cupsH, bpp,
+                realWidth, cupsH, resY, paperCode, mediaCode, sourceCode, copies);
+
         buf = calloc(bpl16, cupsH);
         if (!buf)
         {
@@ -714,6 +817,15 @@ main(int argc, char *argv[])
     }
 
     end_doc(stdout, model);
+
+    if (fflush(stdout) == EOF)
+        fprintf(stderr, "ERROR: rastertozjs: stdout flush failed\n");
+    if (DebugOutput)
+    {
+        if (fclose(DebugOutput) == EOF)
+            fprintf(stderr, "ERROR: rastertozjs: debug output close failed\n");
+        DebugOutput = NULL;
+    }
 
     cupsRasterClose(ras);
     if (fd != 0) close(fd);
