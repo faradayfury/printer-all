@@ -26,6 +26,7 @@
 #include <time.h>
 #include <cups/cups.h>
 #include <cups/raster.h>
+#include <cups/ppd.h>
 #include "jbig.h"
 #include "zjs.h"
 
@@ -590,6 +591,17 @@ main(int argc, char *argv[])
 
     signal(SIGTERM, cancel_handler);
     signal(SIGPIPE, SIG_IGN);
+
+    /* PPD *cupsModelNumber picks the model; a "Model" job option overrides it */
+    {
+        ppd_file_t *ppd = ppdOpenFile(getenv("PPD"));
+        if (ppd)
+        {
+            if (ppd->model_number >= 0 && ppd->model_number <= 3)
+                model = ppd->model_number;
+            ppdClose(ppd);
+        }
+    }
 
     parse_options(argv[5], &density, &economode, &model);
 
