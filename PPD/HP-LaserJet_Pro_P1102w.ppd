@@ -33,7 +33,7 @@
 *cupsVersion:	1.0
 *cupsManualCopies: True
 *cupsModelNumber:  2
-*cupsFilter:	"application/vnd.cups-postscript 0 foomatic-rip"
+*cupsFilter:	"application/vnd.cups-raster 100 rastertozjs"
 *%pprRIP:        foomatic-rip other
 *ModelName:     "HP LaserJet Pro P1102w"
 *ShortNickName: "HP Las.Jet Pro, foo2zjs-z2"
@@ -92,8 +92,11 @@
 *FoomaticRIPOptionSetting Quality=normal: "  "
 *CloseUI: *Quality
 
-*FoomaticRIPOption Resolution: enum CmdLine A 130
-*FoomaticRIPOptionSetting Resolution=1200x600dpi: "-r1200x600 "
+*OpenUI *Resolution/Resolution: PickOne
+*OrderDependency: 130 AnySetup *Resolution
+*DefaultResolution: 1200x600dpi
+*Resolution 1200x600dpi/1200x600 dpi: "<</HWResolution[1200 600]>>setpagedevice"
+*CloseUI: *Resolution
 
 *OpenUI *PageSize/Page Size: PickOne
 *FoomaticRIPOption PageSize: enum CmdLine A

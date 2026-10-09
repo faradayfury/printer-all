@@ -6,7 +6,7 @@ Native Apple Silicon CUPS raster filters for printers that have no official macO
 PDF → cgpdftoraster (macOS built-in) → rastertoXXX (our filter) → printer
 ```
 
-> **Testing status:** Only the HP LaserJet P1007 has been verified on real hardware. The other 88 printers compile and should work — the filters are faithful rewrites of the battle-tested [foo2zjs](http://foo2zjs.rkkda.com/) project — but none have been tested yet. If you have one of these printers, [we'd love your help](#help-us-test).
+> **Testing status:** Only the HP LaserJet P1007 and HP LaserJet Pro P1102 have been verified on real hardware. The other 87 printers compile and should work — the filters are faithful rewrites of the battle-tested [foo2zjs](http://foo2zjs.rkkda.com/) project — but none have been tested yet. If you have one of these printers, [we'd love your help](#help-us-test).
 
 ## Supported Printers
 
@@ -40,7 +40,7 @@ PDF → cgpdftoraster (macOS built-in) → rastertoXXX (our filter) → printer
 | HP LaserJet P2035 | Untested |
 | HP LaserJet P2035n | Untested |
 | HP LaserJet Pro M1212nf MFP | Untested |
-| HP LaserJet Pro P1102 | Untested |
+| HP LaserJet Pro P1102 | **Verified** |
 | HP LaserJet Pro P1102w | Untested |
 | HP LaserJet Pro P1566 | Untested |
 | HP LaserJet Pro P1606dn | Untested |
