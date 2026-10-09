@@ -696,8 +696,10 @@ main(int argc, char *argv[])
 
         *bitmaps = buf;
         jbg_enc_init(&se, jbigW, cupsH, 1, bitmaps, output_jbig, &chain);
-        jbg_enc_options(&se, JbgOptions[0], JbgOptions[1],
-                        JbgOptions[2], JbgOptions[3], JbgOptions[4]);
+        /* foo2zjs forces MX = 0 for the HP models */
+        jbg_enc_options(&se, JbgOptions[0], JbgOptions[1], JbgOptions[2],
+                        model == MODEL_2300DL ? JbgOptions[3] : 0,
+                        JbgOptions[4]);
         jbg_enc_out(&se);
         jbg_enc_free(&se);
 
@@ -705,7 +707,8 @@ main(int argc, char *argv[])
                    jbigW, cupsH, realWidth,
                    paperCode, mediaCode, sourceCode,
                    copies, economode);
-        write_plane(4, &chain, stdout, model); /* plane 4 = K for mono */
+        /* plane 4 = K; HP PPDs run foo2zjs with -P, which omits START_PLANE */
+        write_plane(model == MODEL_2300DL ? 4 : 0, &chain, stdout, model);
         end_page(stdout, model);
 
         free(buf);
